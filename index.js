@@ -29,7 +29,6 @@ const mapTransaction = (transaction) => {
     quantity,
     unitValue,
     totalValue,
-    referenceDate,
     rank,
     operationType_F,
   } = transaction;
@@ -39,7 +38,6 @@ const mapTransaction = (transaction) => {
     quantity,
     unitValue,
     totalValue,
-    referenceDate,
     rank,
     operation: operationType_F.toLowerCase(),
   };
@@ -55,10 +53,11 @@ const getNewPositionAndPriceAvg = (
 ) => {
   const newPosition = prevPosition + transaction.quantity * mod;
 
-  const newPriceAvg = isSale(transaction)
-    ? prevPriceAvg
-    : (prevPosition * prevPriceAvg + transaction.totalValue * mod) /
-      newPosition;
+  const newPriceAvg =
+    isSale(transaction) || transaction.isDayTrade
+      ? prevPriceAvg
+      : (prevPosition * prevPriceAvg + transaction.totalValue * mod) /
+        newPosition;
 
   const newPriceAvgRounded = Math.round(newPriceAvg * 100) / 100;
 
@@ -76,7 +75,7 @@ const getPreviousPositionAndPriceAvg = (transactions, idx) => {
 };
 
 const setProfit = (transaction, prevPriceAvg) => {
-  if (isSale(transaction)) {
+  if (isSale(transaction) && !transaction.isDayTrade) {
     transaction.profit =
       Math.round(
         (transaction.unitValue - prevPriceAvg) * transaction.quantity * 100
@@ -84,11 +83,10 @@ const setProfit = (transaction, prevPriceAvg) => {
   }
 };
 
-const detailTransaction = (acc, transaction, idx, transactionsArray) => {
-  const { prevPriceAvg, prevPosition } = getPreviousPositionAndPriceAvg(
-    transactionsArray,
-    idx
-  );
+const detailTransactions = (acc, transaction, idx, transactionsArray) => {
+  const { prevPriceAvg, prevPosition } = transaction.prevPriceAvg
+    ? transaction
+    : getPreviousPositionAndPriceAvg(transactionsArray, idx);
 
   const mod = isSale(transaction) ? -1 : 1;
 
@@ -114,69 +112,74 @@ const detailTransaction = (acc, transaction, idx, transactionsArray) => {
 const hasDayTrade = (transactions) =>
   new Set(transactions.map((t) => t.operation)).size > 1;
 
-const setIsDayTradeField = (transactions) =>
-  Object.entries(transactions).reduce((acc, bucket) => {
-    const [rank, items] = bucket;
-    const isDayTrade = hasDayTrade(items);
-    const filledTransactions = isDayTrade
-      ? items.map((t) => ({ ...t, isDayTrade: true }))
-      : items;
+const fillDayTradeAccumulator = (transactions) =>
+  transactions.reduce((acc, transaction, idx, transactionsArray) => {
+    const previousTransaction = transactionsArray[idx - 1] ?? {};
+    let { daytradeAccumulator = 0 } = previousTransaction;
 
-    return { ...acc, [rank]: filledTransactions };
+    if (isSale(transaction)) {
+      daytradeAccumulator += transaction.totalValue;
+    } else if (daytradeAccumulator >= 0) {
+      daytradeAccumulator -= transaction.totalValue;
+    }
+
+    transaction.daytradeAccumulator = daytradeAccumulator;
+
+    return [...acc, { ...transaction, daytradeAccumulator }];
+  }, []);
+
+const formatTransactions = (transactions) =>
+  transactions.map(mapTransaction).reverse();
+
+const getDetailedTransactions = (buckets) => {
+  let [lastPriceAvg, lastPosition] = [0, 0];
+
+  return Object.entries(buckets).reduce((acc, bucket) => {
+    const [rank, transactions] = bucket;
+
+    transactions[0].prevPriceAvg = lastPriceAvg;
+    transactions[0].prevPosition = lastPosition;
+
+    let detailedTransactions = transactions;
+
+    if (hasDayTrade(transactions)) {
+      const mappedTransactions = transactions.map((t) => ({
+        ...t,
+        isDayTrade: true,
+      }));
+
+      detailedTransactions = fillDayTradeAccumulator(mappedTransactions);
+    }
+
+    detailedTransactions = transactions.reduce(detailTransactions, []);
+
+    const lastTransaction = transactions[transactions.length - 1];
+    lastPriceAvg = lastTransaction.newPriceAvg;
+    lastPosition = lastTransaction.newPosition;
+
+    return {
+      ...acc,
+      [rank]: detailedTransactions,
+    };
   }, {});
-
-const fillDayTradeAccumulator = (transactions) => {
-  const prevPriceAvg = transactions[0].prevPriceAvg;
-
-  const filled = transactions.reduce(
-    (acc, transaction, idx, transactionsArray) => {
-      const previousTransaction = transactionsArray[idx - 1] ?? {};
-      let { daytradeAccumulator = 0 } = previousTransaction;
-
-      if (isSale(transaction)) {
-        daytradeAccumulator += transaction.totalValue;
-      } else if (daytradeAccumulator >= 0) {
-        daytradeAccumulator -= transaction.totalValue;
-      }
-
-      transaction.daytradeAccumulator = daytradeAccumulator;
-
-      return [...acc, { ...transaction, daytradeAccumulator }];
-    },
-    []
-  );
-
-  return filled.map((t) => ({ ...t, prevPriceAvg, newPriceAvg: prevPriceAvg }));
 };
-
-const setDayTradeProfit = (transactions) =>
-  Object.entries(transactions).reduce((acc, bucket) => {
-    const [rank, items] = bucket;
-
-    const newTransactions = items.some((t) => t.isDayTrade)
-      ? fillDayTradeAccumulator(items)
-      : items;
-
-    return { ...acc, [rank]: newTransactions };
-  }, {});
-
-const getDetailedTransactions = (transactions) =>
-  transactions.map(mapTransaction).reverse().reduce(detailTransaction, []);
 
 const processTransactionsByTicker = async (ticker) => {
   const transactions = await findTransactions(process.env.COOKIE);
   const tickerTransactions = transactions.filter((t) => t.code === ticker);
-  const result = getDetailedTransactions(tickerTransactions);
-  const groupByDate = groupTransactionsBy(result, "rank");
-  const withDayTradeField = setIsDayTradeField(groupByDate);
-  const dayTradeProfit = setDayTradeProfit(withDayTradeField);
-  console.log(JSON.stringify(dayTradeProfit, null, 4));
+  const formattedTransactions = formatTransactions(tickerTransactions);
+  const groupByDate = groupTransactionsBy(formattedTransactions, "rank");
+  const detailedTransactions = getDetailedTransactions(groupByDate);
+  console.log(JSON.stringify(detailedTransactions, null, 4));
 };
 
 const groupTransactionsBy = (transactions, field) =>
   transactions.reduce((acc, item) => {
     const key = item[field];
-    return { ...acc, [key]: [...(acc[key] || []), item] };
+    return {
+      ...acc,
+      [key]: [...(acc[key] || []), item],
+    };
   }, {});
 
 (async () => {
