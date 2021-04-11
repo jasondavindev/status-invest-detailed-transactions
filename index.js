@@ -23,61 +23,94 @@ const findTransactions = async (cookie) => {
   }
 };
 
+const mapTransaction = (transaction) => {
+  const {
+    code,
+    quantity,
+    unitValue,
+    totalValue,
+    referenceDate,
+    rank,
+    operationType_F,
+  } = transaction;
+
+  return {
+    code,
+    quantity,
+    unitValue,
+    totalValue,
+    referenceDate,
+    rank,
+    operation: operationType_F.toLowerCase(),
+  };
+};
+
+const getNewPositionAndPriceAvg = (
+  prevPosition,
+  prevPriceAvg,
+  transaction,
+  mod
+) => {
+  const newPosition = prevPosition + transaction.quantity * mod;
+  const newPriceAvg =
+    (prevPosition * prevPriceAvg + transaction.totalValue * mod) / newPosition;
+
+  const newPriceAvgRounded = Math.round(newPriceAvg * 100) / 100;
+
+  return { newPosition, newPriceAvgRounded };
+};
+
+const getPreviousPositionAndPriceAvg = (transactions, idx) => {
+  let { newPriceAvg: prevPriceAvg, newPosition: prevPosition } =
+    transactions[idx - 1] ?? {};
+
+  prevPriceAvg = prevPriceAvg || 0;
+  prevPosition = prevPosition || 0;
+
+  return { prevPriceAvg, prevPosition };
+};
+
+const setProfit = (transaction, prevPriceAvg) => {
+  if (transaction.operation === "venda") {
+    transaction.profit =
+      Math.round(
+        (transaction.unitValue - prevPriceAvg) * transaction.quantity * 100
+      ) / 100;
+  }
+};
+
+const detailTransaction = (acc, transaction, idx, transactionsArray) => {
+  const { prevPriceAvg, prevPosition } = getPreviousPositionAndPriceAvg(
+    transactionsArray,
+    idx
+  );
+
+  const mod = transaction.operation === "compra" ? 1 : -1;
+
+  const { newPosition, newPriceAvgRounded } = getNewPositionAndPriceAvg(
+    prevPosition,
+    prevPriceAvg,
+    transaction,
+    mod
+  );
+
+  transaction.newPriceAvg = [-Infinity, Infinity].includes(newPriceAvgRounded)
+    ? 0
+    : newPriceAvgRounded;
+  transaction.newPosition = newPosition;
+  transaction.prevPosition = prevPosition;
+  transaction.prevPriceAvg = prevPriceAvg;
+
+  setProfit(transaction, prevPriceAvg);
+
+  return [...acc, transaction];
+};
+
 const getDetailedTransactions = (transactions) => {
   return transactions
-    .map((t) => {
-      const {
-        code,
-        quantity,
-        unitValue,
-        totalValue,
-        referenceDate,
-        rank,
-        operationType_F,
-      } = t;
-
-      return {
-        code,
-        quantity,
-        unitValue,
-        totalValue,
-        referenceDate,
-        rank,
-        operation: operationType_F.toLowerCase(),
-      };
-    })
+    .map(mapTransaction)
     .reverse()
-    .reduce((acc, tran, idx, array) => {
-      let { newAvgPrice: prevAvgPrice, newPosition: prevPosition } =
-        array[idx - 1] ?? {};
-
-      prevAvgPrice = prevAvgPrice || 0;
-      prevPosition = prevPosition || 0;
-
-      const mod = tran.operation === "compra" ? 1 : -1;
-
-      const newAvgPrice =
-        (prevPosition * prevAvgPrice + tran.totalValue * mod) /
-        (prevPosition + tran.quantity * mod);
-      const newPosition = prevPosition + tran.quantity * mod;
-
-      const newAvgPriceRounded = Math.round(newAvgPrice * 100) / 100;
-
-      tran.newAvgPrice = [-Infinity, Infinity].includes(newAvgPriceRounded)
-        ? 0
-        : newAvgPriceRounded;
-      tran.newPosition = newPosition;
-      tran.prevPosition = prevPosition;
-      tran.prevAvgPrice = prevAvgPrice;
-
-      if (tran.operation === "venda") {
-        tran.profit =
-          Math.round((tran.unitValue - prevAvgPrice) * tran.quantity * 100) /
-          100;
-      }
-
-      return [...acc, tran];
-    }, []);
+    .reduce(detailTransaction, []);
 };
 
 const processTransactionsByTicker = async (ticker) => {
