@@ -111,19 +111,66 @@ const detailTransaction = (acc, transaction, idx, transactionsArray) => {
   return [...acc, transaction];
 };
 
-const getDetailedTransactions = (transactions) => {
-  return transactions
-    .map(mapTransaction)
-    .reverse()
-    .reduce(detailTransaction, []);
+const hasDayTrade = (transactions) =>
+  new Set(transactions.map((t) => t.operation)).size > 1;
+
+const setIsDayTradeField = (transactions) =>
+  Object.entries(transactions).reduce((acc, bucket) => {
+    const [rank, items] = bucket;
+    const isDayTrade = hasDayTrade(items);
+    const filledTransactions = isDayTrade
+      ? items.map((t) => ({ ...t, isDayTrade: true }))
+      : items;
+
+    return { ...acc, [rank]: filledTransactions };
+  }, {});
+
+const fillDayTradeAccumulator = (transactions) => {
+  const prevPriceAvg = transactions[0].prevPriceAvg;
+
+  const filled = transactions.reduce(
+    (acc, transaction, idx, transactionsArray) => {
+      const previousTransaction = transactionsArray[idx - 1] ?? {};
+      let { daytradeAccumulator = 0 } = previousTransaction;
+
+      if (isSale(transaction)) {
+        daytradeAccumulator += transaction.totalValue;
+      } else if (daytradeAccumulator >= 0) {
+        daytradeAccumulator -= transaction.totalValue;
+      }
+
+      transaction.daytradeAccumulator = daytradeAccumulator;
+
+      return [...acc, { ...transaction, daytradeAccumulator }];
+    },
+    []
+  );
+
+  return filled.map((t) => ({ ...t, prevPriceAvg, newPriceAvg: prevPriceAvg }));
 };
+
+const setDayTradeProfit = (transactions) =>
+  Object.entries(transactions).reduce((acc, bucket) => {
+    const [rank, items] = bucket;
+
+    const newTransactions = items.some((t) => t.isDayTrade)
+      ? fillDayTradeAccumulator(items)
+      : items;
+
+    return { ...acc, [rank]: newTransactions };
+  }, {});
+
+const getDetailedTransactions = (transactions) =>
+  transactions.map(mapTransaction).reverse().reduce(detailTransaction, []);
 
 const processTransactionsByTicker = async (ticker) => {
   const transactions = await findTransactions(process.env.COOKIE);
   const tickerTransactions = transactions.filter((t) => t.code === ticker);
   const result = getDetailedTransactions(tickerTransactions);
   const groupByDate = groupTransactionsBy(result, "rank");
-  console.log(JSON.stringify(groupByDate, null, 4));
+  const withDayTradeField = setIsDayTradeField(groupByDate);
+  const dayTradeProfit = setDayTradeProfit(withDayTradeField);
+  console.log(JSON.stringify(dayTradeProfit, null, 4));
 };
 
 const groupTransactionsBy = (transactions, field) =>
