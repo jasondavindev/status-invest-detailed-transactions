@@ -1,5 +1,6 @@
 const axios = require("axios").default;
 const querystring = require("querystring");
+const example = require("./example/simple.json");
 
 const findTransactions = async (cookie) => {
   try {
@@ -137,32 +138,35 @@ const getDetailedTransactions = (buckets) => {
   return Object.entries(buckets).reduce((acc, bucket) => {
     const [rank, transactions] = bucket;
 
-    transactions[0].prevPriceAvg = lastPriceAvg;
-    transactions[0].prevPosition = lastPosition;
+    let filledTransactions = transactions;
+    filledTransactions[0].prevPriceAvg = lastPriceAvg;
+    filledTransactions[0].prevPosition = lastPosition;
 
-    let detailedTransactions = transactions;
-
-    if (hasDayTrade(transactions)) {
-      const mappedTransactions = transactions.map((t) => ({
+    if (hasDayTrade(filledTransactions)) {
+      const mappedTransactions = filledTransactions.map((t) => ({
         ...t,
         isDayTrade: true,
       }));
 
-      detailedTransactions = fillDayTradeAccumulator(mappedTransactions);
+      filledTransactions = fillDayTradeAccumulator(mappedTransactions);
     }
 
-    detailedTransactions = transactions.reduce(detailTransactions, []);
-
-    const lastTransaction = transactions[transactions.length - 1];
+    filledTransactions = filledTransactions.reduce(detailTransactions, []);
+    const lastTransaction = filledTransactions[filledTransactions.length - 1];
     lastPriceAvg = lastTransaction.newPriceAvg;
     lastPosition = lastTransaction.newPosition;
 
     return {
       ...acc,
-      [rank]: detailedTransactions,
+      [rank]: filledTransactions,
     };
   }, {});
 };
+
+const consolidate = (transactions) =>
+  Object.values(transactions)
+    .flatMap((t) => t)
+    .reduce((acc, item) => acc + (item.profit ?? 0), 0);
 
 const processTransactionsByTicker = async (ticker) => {
   const transactions = await findTransactions(process.env.COOKIE);
@@ -171,6 +175,7 @@ const processTransactionsByTicker = async (ticker) => {
   const groupByDate = groupTransactionsBy(formattedTransactions, "rank");
   const detailedTransactions = getDetailedTransactions(groupByDate);
   console.log(JSON.stringify(detailedTransactions, null, 4));
+  console.log("Consolidate: " + consolidate(detailedTransactions));
 };
 
 const groupTransactionsBy = (transactions, field) =>

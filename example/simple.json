@@ -1,0 +1,50 @@
+[
+  {
+    "code": "OIBR3",
+    "quantity": 10,
+    "unitValue": 2,
+    "totalValue": 20,
+    "rank": 20200101,
+    "operationType_F": "Compra"
+  },
+  {
+    "code": "OIBR3",
+    "quantity": 10,
+    "unitValue": 3,
+    "totalValue": 30,
+    "rank": 20200102,
+    "operationType_F": "Compra"
+  },
+  {
+    "code": "OIBR3",
+    "quantity": 10,
+    "unitValue": 2,
+    "totalValue": 20,
+    "rank": 20200103,
+    "operationType_F": "Venda"
+  },
+  {
+    "code": "OIBR3",
+    "quantity": 10,
+    "unitValue": 2,
+    "totalValue": 20,
+    "rank": 20200104,
+    "operationType_F": "Venda"
+  },
+  {
+    "code": "OIBR3",
+    "quantity": 20,
+    "unitValue": 3,
+    "totalValue": 60,
+    "rank": 20200105,
+    "operationType_F": "Compra"
+  },
+  {
+    "code": "OIBR3",
+    "quantity": 20,
+    "unitValue": 4,
+    "totalValue": 80,
+    "rank": 20200106,
+    "operationType_F": "Venda"
+  }
+]
