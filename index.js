@@ -122,8 +122,15 @@ const processTransactionsByTicker = async (ticker) => {
   const transactions = await findTransactions(process.env.COOKIE);
   const tickerTransactions = transactions.filter((t) => t.code === ticker);
   const result = getDetailedTransactions(tickerTransactions);
-  console.log(JSON.stringify(result, null, 4));
+  const groupByDate = groupTransactionsBy(result, "rank");
+  console.log(JSON.stringify(groupByDate, null, 4));
 };
+
+const groupTransactionsBy = (transactions, field) =>
+  transactions.reduce((acc, item) => {
+    const key = item[field];
+    return { ...acc, [key]: [...(acc[key] || []), item] };
+  }, {});
 
 (async () => {
   await processTransactionsByTicker(process.env.TICKER);
