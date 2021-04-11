@@ -45,6 +45,8 @@ const mapTransaction = (transaction) => {
   };
 };
 
+const isSale = (transaction) => transaction.operation === "venda";
+
 const getNewPositionAndPriceAvg = (
   prevPosition,
   prevPriceAvg,
@@ -52,8 +54,11 @@ const getNewPositionAndPriceAvg = (
   mod
 ) => {
   const newPosition = prevPosition + transaction.quantity * mod;
-  const newPriceAvg =
-    (prevPosition * prevPriceAvg + transaction.totalValue * mod) / newPosition;
+
+  const newPriceAvg = isSale(transaction)
+    ? prevPriceAvg
+    : (prevPosition * prevPriceAvg + transaction.totalValue * mod) /
+      newPosition;
 
   const newPriceAvgRounded = Math.round(newPriceAvg * 100) / 100;
 
@@ -71,7 +76,7 @@ const getPreviousPositionAndPriceAvg = (transactions, idx) => {
 };
 
 const setProfit = (transaction, prevPriceAvg) => {
-  if (transaction.operation === "venda") {
+  if (isSale(transaction)) {
     transaction.profit =
       Math.round(
         (transaction.unitValue - prevPriceAvg) * transaction.quantity * 100
@@ -85,7 +90,7 @@ const detailTransaction = (acc, transaction, idx, transactionsArray) => {
     idx
   );
 
-  const mod = transaction.operation === "compra" ? 1 : -1;
+  const mod = isSale(transaction) ? -1 : 1;
 
   const { newPosition, newPriceAvgRounded } = getNewPositionAndPriceAvg(
     prevPosition,

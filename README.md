@@ -48,10 +48,10 @@ docker run --rm -ti -e COOKIE="YOUR_COOKIE_HERE" -e TICKER="ITSA4" -w /app -v $P
     "referenceDate": "2021-02-18T00:00:00",
     "rank": 20210218,
     "operation": "compra",
-    "newAvgPrice": 9.0,
+    "newPriceAvg": 9.0,
     "newPosition": 10,
     "prevPosition": 0,
-    "prevAvgPrice": 0
+    "prevPriceAvg": 0
   },
   ... other transactions
 ]
@@ -70,10 +70,10 @@ Example
   "referenceDate": "2020-10-29T00:00:00",
   "rank": 20201029,
   "operation": "venda",
-  "newAvgPrice": 0,
+  "newPriceAvg": 0,
   "newPosition": 0,
   "prevPosition": 400,
-  "prevAvgPrice": 1.44,
+  "prevPriceAvg": 1.44,
   "profit": 28
 }
 ```
